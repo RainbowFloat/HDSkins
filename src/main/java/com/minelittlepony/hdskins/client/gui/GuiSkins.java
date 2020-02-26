@@ -32,9 +32,9 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import org.apache.commons.io.IOUtils;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -237,14 +237,8 @@ public class GuiSkins extends GameGui implements ISkinUploadHandler, FileDrop.Ca
     }
 
     @Override
-    public void onClose() {
-        super.onClose();
-
-        try {
-            uploader.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public void removed() {
+        IOUtils.closeQuietly(uploader, chooser);
 
         HDSkins.getInstance().getProfileRepository().clear();
 

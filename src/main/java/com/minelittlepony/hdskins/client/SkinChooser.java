@@ -3,18 +3,20 @@ package com.minelittlepony.hdskins.client;
 import com.minelittlepony.hdskins.client.gui.FileSaverScreen;
 import com.minelittlepony.hdskins.client.gui.FileSelectorScreen;
 import com.minelittlepony.hdskins.client.upload.FileDialog;
-
+import com.minelittlepony.hdskins.util.Watcher;
 import net.minecraft.client.texture.NativeImage;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.logging.log4j.LogManager;
 
+import javax.annotation.Nullable;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import javax.annotation.Nullable;
+import java.nio.file.StandardWatchEventKinds;
 
-public class SkinChooser {
+public class SkinChooser implements Closeable {
 
     public static final int MAX_SKIN_DIMENSION = 1024;
 
@@ -38,6 +40,9 @@ public class SkinChooser {
     private FileDialog openFileThread;
 
     private final SkinUploader uploader;
+
+    @Nullable
+    private Watcher<Path> watcher;
 
     private volatile String status = MSG_CHOOSE;
 
@@ -83,6 +88,35 @@ public class SkinChooser {
 
     public void selectFile(Path skinFile) {
         status = evaluateAndSelect(skinFile);
+        try {
+            if (watcher != null) {
+                watcher.close();
+                watcher = null;
+            }
+            watcher = new Watcher.Builder<Path>()
+                    .watch(skinFile.getParent())
+                    .on(StandardWatchEventKinds.ENTRY_MODIFY, e -> {
+                        if (e.count() == 1 && e.context().equals(skinFile.getFileName())) {
+                            status = evaluateAndSelect(skinFile);
+                        }
+                    })
+                    .on(StandardWatchEventKinds.ENTRY_DELETE, e -> {
+                        if (e.count() == 1 && e.context().equals(skinFile.getFileName())) {
+                            status = ERR_UNREADABLE;
+                            uploader.setLocalSkin(null);
+                        }
+                    })
+                    .build();
+        } catch (IOException e) {
+            LogManager.getLogger().warn(e);
+        }
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (watcher != null) {
+            watcher.close();
+        }
     }
 
     private String evaluateAndSelect(Path skinFile) {
